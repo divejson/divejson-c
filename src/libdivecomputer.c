@@ -405,8 +405,12 @@ static int by_tank(const void *a, const void *b)
 	return (left > right) - (left < right);
 }
 
-/* The profile, or NULL with `*failed` untouched where the parser reported no sample. */
-static json_value *profile_json(profile *p, int *failed)
+/*
+ * The profile, or NULL with `*failed` untouched where the parser reported no sample. A tank
+ * that reports pressures and is no cylinder of `cylinders` — the parser lists it nowhere, or
+ * lists it and cannot read it — becomes a cylinder of its own, carrying its pressures alone.
+ */
+static json_value *profile_json(profile *p, json_value *cylinders, int *failed)
 {
 	if (p->open)
 		sample_close(p);
@@ -437,11 +441,16 @@ static json_value *profile_json(profile *p, int *failed)
 		if (pressures == NULL)
 			pressures = json_array(failed);
 		json_value *one = series_json(&p->pressures[i], failed);
-		/* A tank the computer lists nowhere keeps its own index. */
-		long long tank = p->pressures[i].key;
-		if (tank < p->tank_count && p->tank_numbers[tank] >= 0)
-			tank = p->tank_numbers[tank];
-		json_set(one, "gas_number", json_integer(tank, failed), failed);
+		long long tank = p->pressures[i].key, number;
+		if (tank < p->tank_count && p->tank_numbers[tank] >= 0) {
+			number = p->tank_numbers[tank];
+		} else {
+			number = (long long) json_count(cylinders);
+			json_value *cylinder = json_object(failed);
+			json_set(cylinder, "gas_number", json_integer(number, failed), failed);
+			json_append(cylinders, cylinder, failed);
+		}
+		json_set(one, "gas_number", json_integer(number, failed), failed);
 		json_append(pressures, one, failed);
 	}
 	if (pressures != NULL)
@@ -492,7 +501,8 @@ static void put_usage(json_value *cylinder, dc_usage_t usage, int *failed)
 }
 
 /*
- * The dive's cylinders: the parser's tanks in its order, then each gas mix no tank holds.
+ * The dive's cylinders: the parser's tanks in its order, then each gas mix no tank holds;
+ * `profile_json` appends a tank that reported pressures and is neither.
  * A mix or a tank the parser lists and cannot read is no cylinder, and the gas numbers close
  * over it. `numbering` receives, by libdivecomputer's own mix and tank indices, the gas number
  * of the first cylinder holding each mix and of each tank's cylinder; -1 for none.
@@ -778,10 +788,6 @@ static json_value *build(dc_parser_t *parser, const char *uuid, const char *star
 	profile p;
 	memset(&p, 0, sizeof p);
 	json_value *cylinders = cylinders_json(parser, &p, failed);
-	if (json_count(cylinders) > 0)
-		json_set(dive, "cylinders", cylinders, failed);
-	else
-		json_free(cylinders);
 
 	json_value *recording = json_object(failed);
 	put_settings(recording, parser, failed);
@@ -789,10 +795,14 @@ static json_value *build(dc_parser_t *parser, const char *uuid, const char *star
 	p.events = json_array(&p.failed);
 	/* A walk that fails part-way keeps the samples delivered before it. */
 	dc_parser_samples_foreach(parser, sample_callback, &p);
-	json_value *profile = profile_json(&p, failed);
+	json_value *profile = profile_json(&p, cylinders, failed);
 	if (profile != NULL)
 		json_set(recording, "profile", profile, failed);
 	profile_free(&p);
+	if (json_count(cylinders) > 0)
+		json_set(dive, "cylinders", cylinders, failed);
+	else
+		json_free(cylinders);
 
 	json_value *recordings = json_array(failed);
 	json_append(recordings, recording, failed);

@@ -137,7 +137,7 @@ The library hands its host **one dive**, and `divejson-raw` wraps it in a docume
 ### Cylinders
 
 **The dive's cylinders are the computer's tanks in its order, then each gas mix no tank
-holds.** A cylinder's `gas_number` is its place in that list. A tank or a mix the parser
+holds, then each tank that reported pressures and is none of those** (*Profile* below). A cylinder's `gas_number` is its place in that list. A tank or a mix the parser
 lists and then cannot read is skipped, and the numbering closes over it; a tank's mix, a gas
 switch and a pressure reading still name mixes and tanks by libdivecomputer's own indices,
 which are resolved to the cylinders they became.
@@ -193,7 +193,7 @@ all has no profile.
 | --- | --- |
 | `DC_SAMPLE_DEPTH` | `depth` |
 | `DC_SAMPLE_TEMPERATURE` | `temperature` |
-| `DC_SAMPLE_PRESSURE`, per `tank` | `pressures[]`, one series per tank index, in index order, `gas_number` that tank's cylinder, or the index itself for a tank the computer lists nowhere |
+| `DC_SAMPLE_PRESSURE`, per `tank` | `pressures[]`, one series per tank index, in index order, `gas_number` that tank's cylinder. A tank that is no cylinder — listed nowhere, or listed and unreadable — becomes one at the end of `cylinders`, carrying nothing but its pressures, `converting.md`'s *Evidence of a tank* |
 | `DC_SAMPLE_DECO`, `DC_DECO_NDL` | `ndl` |
 | `DC_SAMPLE_DECO`, `DC_DECO_DECOSTOP` | `ceiling`, from the stop's depth |
 | `DC_SAMPLE_DECO`'s `tts`, above zero, whatever the kind | `tts` |
