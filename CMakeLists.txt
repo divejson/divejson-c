@@ -94,11 +94,17 @@ if(DIVEJSON_TESTS)
       DIVEJSON_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/libdivecomputer")
     add_test(NAME libdivecomputer COMMAND test_libdivecomputer)
 
+    # Supplies its own dc_* symbols, as a host does: no libdivecomputer is linked.
+    add_executable(test_mapping tests/test_mapping.c)
+    target_link_libraries(test_mapping PRIVATE divejson)
+    target_include_directories(test_mapping PRIVATE "${DIVEJSON_LIBDIVECOMPUTER_INCLUDE_DIR}")
+    add_test(NAME mapping COMMAND test_mapping)
+
     if(DIVEJSON_CLI)
       find_package(Python3 COMPONENTS Interpreter REQUIRED)
       add_test(NAME cli
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.py"
-                "$<TARGET_FILE:divejson-raw>")
+                "$<TARGET_FILE:divejson-raw>" "$<TARGET_FILE:test_mapping>")
     endif()
   endif()
 endif()

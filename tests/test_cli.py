@@ -1,8 +1,9 @@
 """divejson-raw, run as a consumer runs it: arguments in, a document or an exit status out.
 
-    python3 tests/test_cli.py path/to/divejson-raw
+    python3 tests/test_cli.py path/to/divejson-raw [path/to/test_mapping]
 
-Every document the run produces is checked with `divejson validate`, from the divejson
+Every document the run produces, and every one test_mapping writes when it is given, is
+checked with `divejson validate`, from the divejson
 release tests/requirements.txt pins, which has to be on PATH. `--write` regenerates the
 expected documents instead of comparing against them (CONTRIBUTING.md says when).
 """
@@ -50,9 +51,10 @@ def main():
     args = sys.argv[1:]
     write = "--write" in args
     args = [arg for arg in args if arg != "--write"]
-    if len(args) != 1:
+    if len(args) not in (1, 2):
         sys.exit(__doc__)
     cli = str(Path(args[0]).resolve())
+    mapping = str(Path(args[1]).resolve()) if len(args) == 2 else None
     validator = shutil.which("divejson")
     if validator is None:
         sys.exit("divejson is not on PATH: pip install -r tests/requirements.txt")
@@ -121,8 +123,15 @@ def main():
         check(needle in result.stderr.decode(), f"{label}: stderr {result.stderr.decode()!r} lacks {needle!r}")
         check(result.stdout == b"", f"{label}: wrote to stdout")
 
-    documents = sorted(produced.glob("*.divejson"))
-    check(len(documents) == len(PAIRS) + 2, f"{len(documents)} documents produced")
+    expected_count = len(PAIRS) + 2
+    if mapping is not None:
+        written = produced / "mapping"
+        written.mkdir()
+        result = subprocess.run([mapping, str(written)], capture_output=True, text=True)
+        check(result.returncode == 0, f"test_mapping: {result.stdout}{result.stderr}")
+        expected_count += 2
+    documents = sorted(produced.rglob("*.divejson"))
+    check(len(documents) == expected_count, f"{len(documents)} documents produced")
     validated = subprocess.run([validator, "validate", *map(str, documents)], capture_output=True, text=True)
     print(validated.stdout, end="")
     check(validated.returncode == 0, f"divejson validate: {validated.stdout}{validated.stderr}")

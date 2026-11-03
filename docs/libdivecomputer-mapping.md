@@ -137,10 +137,12 @@ The library hands its host **one dive**, and `divejson-raw` wraps it in a docume
 ### Cylinders
 
 **The dive's cylinders are the computer's tanks in its order, then each gas mix no tank
-holds, then each tank that reported pressures and is none of those** (*Profile* below). A cylinder's `gas_number` is its place in that list. A tank or a mix the parser
-lists and then cannot read is skipped, and the numbering closes over it; a tank's mix, a gas
-switch and a pressure reading still name mixes and tanks by libdivecomputer's own indices,
-which are resolved to the cylinders they became.
+holds, then each tank that reported pressures and is none of those** (*Profile* below). A
+cylinder's `gas_number` is its place in that list, written on every cylinder where a pressure
+series or a gas switch names one, and on none where nothing does (`converting.md`'s
+*Cylinders*). A tank or a mix the parser lists and then cannot read is skipped, and the
+numbering closes over it; a tank's mix, a gas switch and a pressure reading still name mixes
+and tanks by libdivecomputer's own indices, which are resolved to the cylinders they became.
 
 | libdivecomputer | DiveJSON |
 | --- | --- |

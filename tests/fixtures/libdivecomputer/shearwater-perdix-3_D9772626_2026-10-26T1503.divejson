@@ -14,14 +14,14 @@
       "max_depth": 47.7,
       "cylinders": [
         {
-          "gas_number": 0,
           "oxygen": 51,
-          "helium": 0
+          "helium": 0,
+          "gas_number": 0
         },
         {
-          "gas_number": 1,
           "oxygen": 21,
-          "helium": 0
+          "helium": 0,
+          "gas_number": 1
         }
       ],
       "recordings": [

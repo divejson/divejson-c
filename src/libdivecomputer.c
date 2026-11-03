@@ -133,6 +133,8 @@ typedef struct profile {
 	/* Gas numbers, by libdivecomputer's mix and tank indices; -1 for none. */
 	long long *mix_numbers, *tank_numbers;
 	unsigned int mix_count, tank_count;
+	/* Whether a pressure series or a gas switch names a cylinder by its gas number. */
+	int numbered;
 
 	int open;
 	sample current;
@@ -275,8 +277,10 @@ static void sample_close(profile *p)
 		json_value *event = json_object(&p->failed);
 		json_set(event, "time", json_integer(t, &p->failed), &p->failed);
 		json_set(event, "type", json_string("gas_switch", &p->failed), &p->failed);
-		if (s->gasmix < p->mix_count && p->mix_numbers[s->gasmix] >= 0)
+		if (s->gasmix < p->mix_count && p->mix_numbers[s->gasmix] >= 0) {
 			json_set(event, "gas_number", json_integer(p->mix_numbers[s->gasmix], &p->failed), &p->failed);
+			p->numbered = 1;
+		}
 		json_append(p->events, event, &p->failed);
 	}
 	for (size_t i = 0; i < s->event_count; i++) {
@@ -446,12 +450,11 @@ static json_value *profile_json(profile *p, json_value *cylinders, int *failed)
 			number = p->tank_numbers[tank];
 		} else {
 			number = (long long) json_count(cylinders);
-			json_value *cylinder = json_object(failed);
-			json_set(cylinder, "gas_number", json_integer(number, failed), failed);
-			json_append(cylinders, cylinder, failed);
+			json_append(cylinders, json_object(failed), failed);
 		}
 		json_set(one, "gas_number", json_integer(number, failed), failed);
 		json_append(pressures, one, failed);
+		p->numbered = 1;
 	}
 	if (pressures != NULL)
 		json_set(out, "pressures", pressures, failed);
@@ -504,8 +507,10 @@ static void put_usage(json_value *cylinder, dc_usage_t usage, int *failed)
  * The dive's cylinders: the parser's tanks in its order, then each gas mix no tank holds;
  * `profile_json` appends a tank that reported pressures and is neither.
  * A mix or a tank the parser lists and cannot read is no cylinder, and the gas numbers close
- * over it. `numbering` receives, by libdivecomputer's own mix and tank indices, the gas number
- * of the first cylinder holding each mix and of each tank's cylinder; -1 for none.
+ * over it. A cylinder's gas number is its place in the list, written by `build` where
+ * something refers to it. `numbering` receives, by libdivecomputer's own mix and tank
+ * indices, the gas number of the first cylinder holding each mix and of each tank's
+ * cylinder; -1 for none.
  */
 static json_value *cylinders_json(dc_parser_t *parser, profile *numbering, int *failed)
 {
@@ -542,7 +547,6 @@ static json_value *cylinders_json(dc_parser_t *parser, profile *numbering, int *
 			continue;
 		tank_numbers[i] = number;
 		json_value *cylinder = json_object(failed);
-		json_set(cylinder, "gas_number", json_integer(number, failed), failed);
 		dc_usage_t usage = tank.usage;
 		if (tank.gasmix != DC_GASMIX_UNKNOWN && tank.gasmix < mixes && readable[tank.gasmix]) {
 			put_gas(cylinder, &gas[tank.gasmix], failed);
@@ -572,7 +576,6 @@ static json_value *cylinders_json(dc_parser_t *parser, profile *numbering, int *
 			continue;
 		mix_numbers[i] = number;
 		json_value *cylinder = json_object(failed);
-		json_set(cylinder, "gas_number", json_integer(number, failed), failed);
 		put_gas(cylinder, &gas[i], failed);
 		put_usage(cylinder, gas[i].usage, failed);
 		json_append(out, cylinder, failed);
@@ -799,6 +802,9 @@ static json_value *build(dc_parser_t *parser, const char *uuid, const char *star
 	if (profile != NULL)
 		json_set(recording, "profile", profile, failed);
 	profile_free(&p);
+	/* Numbered only where something joins on the number, converting.md's rule. */
+	for (size_t i = 0; p.numbered && i < json_count(cylinders); i++)
+		json_set(cylinders->as.array.items[i], "gas_number", json_integer((long long) i, failed), failed);
 	if (json_count(cylinders) > 0)
 		json_set(dive, "cylinders", cylinders, failed);
 	else

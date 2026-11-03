@@ -12,7 +12,7 @@ who decides and whose `CONTRIBUTING.md` says how a change to the format lands.
 | `include/`, `src/` | `libdivejson`: the core (`divejson.h`, `dive.c`, `json.c`, `identity.c`) and the libdivecomputer reader (`divejson_libdivecomputer.h`, `libdivecomputer.c`) |
 | `cli/` | `divejson-raw` |
 | `docs/libdivecomputer-mapping.md` | the reader's specification, which `src/libdivecomputer.c` implements; the two change together |
-| `tests/` | the suite: `test_core.c`, `test_libdivecomputer.c`, `test_cli.py`, and in `fixtures/libdivecomputer/` the pairs |
+| `tests/` | the suite: `test_core.c`, `test_libdivecomputer.c`, `test_mapping.c`, `test_cli.py`, and in `fixtures/libdivecomputer/` the pairs |
 | `tests/swiftpm/` | the executable the macOS job builds against libdc-swift |
 | `fuzz/` | the libFuzzer target |
 | `vendor/libdivecomputer` | the libdivecomputer fork, a submodule at `LIBDIVECOMPUTER_COMMIT` |
@@ -29,10 +29,11 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-`ctest` runs three suites: the core's, the reader's through its one call, and
-`tests/test_cli.py`, which runs `divejson-raw` as a caller would — with no environment —
+`ctest` runs four suites: the core's; the reader's through its one call; the mapping's
+numbering rules over a scripted parser, `tests/test_mapping.c`, which supplies its own
+`dc_*` symbols as a host does; and `tests/test_cli.py`, which runs `divejson-raw` as a caller would — with no environment —
 compares its documents with the expected ones, exercises every refusal and its exit status,
-and runs `divejson validate` over every document it produced. That last needs the `divejson`
+and runs `divejson validate` over every document it and `test_mapping` produced. That last needs the `divejson`
 release `tests/requirements.txt` pins on `PATH`; the test fails rather than skips without it.
 
 CI runs more than that, and every job is required to pass:
@@ -41,7 +42,7 @@ CI runs more than that, and every job is required to pass:
 | --- | --- |
 | the core | the core builds and passes with the reader off and no submodule checked out |
 | the pins | the submodule, `LIBDIVECOMPUTER_COMMIT`, `NOTICE` and the libdc-swift release in `tests/swiftpm/Package.swift` name one commit |
-| Linux | the build and the three suites |
+| Linux | the build and the four suites |
 | sanitizers | the same under AddressSanitizer and UndefinedBehaviorSanitizer, the vendored libdivecomputer instrumented too |
 | fuzz | five minutes of `fuzz/fuzz_libdivecomputer.c`, which fuzzes the descriptor across the linked table as well as the bytes, since a caller may accept any descriptor it is handed. `.github/scripts/fuzz_triage.py` re-runs every input it kept and fails the job on a finding in this repository's code; one inside `vendor/libdivecomputer` goes in the job summary and the uploaded findings, since the vendored copy is not patched here |
 | macOS | an executable linking `Package.swift`'s library against libdc-swift's libdivecomputer reads both fixtures to the expected documents |

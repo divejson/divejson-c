@@ -19,17 +19,17 @@
       },
       "cylinders": [
         {
-          "gas_number": 0,
           "oxygen": 21,
           "helium": 0,
           "volume": 22.2,
           "start_pressure": 207.7,
-          "end_pressure": 120.39
+          "end_pressure": 120.39,
+          "gas_number": 0
         },
         {
-          "gas_number": 1,
           "oxygen": 51,
-          "helium": 0
+          "helium": 0,
+          "gas_number": 1
         }
       ],
       "recordings": [
