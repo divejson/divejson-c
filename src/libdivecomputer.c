@@ -864,14 +864,15 @@ divejson_dive *divejson_libdivecomputer_read(const divejson_libdivecomputer_inpu
 		goto done;
 	}
 
-	char start[40];
-	if (!parser_start(parser, start, sizeof start)) {
+	char reported[40];
+	const char *start = reported;
+	if (!parser_start(parser, reported, sizeof reported)) {
 		if (input->fallback_start == NULL) {
 			dive_error(error, error_size,
 			           "libdivecomputer reports no start for this dive, and no fallback start was given");
 			goto done;
 		}
-		snprintf(start, sizeof start, "%s", input->fallback_start);
+		start = input->fallback_start;
 	}
 
 	int failed = 0;

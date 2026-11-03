@@ -47,6 +47,14 @@ static void test_fallback_start(void)
 		CHECK_CONTAINS(divejson_dive_json(dive), "\"started_at\":\"2026-10-02T11:36:00\"");
 	divejson_dive_free(dive);
 
+	/* A fallback is written as given, however long its fraction. */
+	const char *precise = "2026-10-02T08:36:00.12345678901234567890+03:00";
+	dive = read_solution(SOLUTION, sizeof SOLUTION, precise, NULL, error);
+	CHECK(dive != NULL);
+	if (dive != NULL)
+		CHECK_CONTAINS(divejson_dive_json(dive), "\"started_at\":\"2026-10-02T08:36:00.12345678901234567890+03:00\"");
+	divejson_dive_free(dive);
+
 	CHECK(read_solution(SOLUTION, sizeof SOLUTION, "2026-10-02 11:36", NULL, error) == NULL);
 	CHECK_CONTAINS(error, "fallback start");
 }
