@@ -40,8 +40,17 @@ The arguments are a contract, and change only with a release that says so:
 | `--version` | prints the version and exits |
 
 An option's value may also follow it after `=`. The program reads no environment variable
-and no file but `FILE`, writes nothing but the document, and sets no limit of its own on
-memory or time: a caller running it over bytes it did not choose sets those around it.
+and no file but `FILE`, and writes nothing but the document.
+
+**Run over bytes you did not choose, `divejson-raw` must be isolated**: in a process of its
+own, with no secret in its environment, under a timeout and a memory ceiling, which it does
+not set for itself. Its parsers are libdivecomputer's, and libdivecomputer's parsers trust
+their input. Fuzzing the vendored copy finds reads past the end of the buffer in several
+families' parsers and inputs on which the Suunto Nautic parser never returns; on such an
+input the process can die on a signal or run until it is stopped. The vendored copy stays
+exactly what its upstream released, the commit an Apple host links too, so those defects are
+fixed upstream rather than here, and CI's fuzz run lists them on every pull request without
+failing on them. A finding in this repository's own code fails it.
 
 | exit status | meaning |
 | --- | --- |
