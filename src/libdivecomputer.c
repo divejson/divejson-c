@@ -426,7 +426,8 @@ static json_value *profile_json(profile *p, int *failed)
 	for (size_t i = 0; i < sizeof channels / sizeof *channels; i++)
 		if (channels[i].s->count > 0)
 			json_set(out, channels[i].key, series_json(channels[i].s, failed), failed);
-	qsort(p->pressures, p->pressure_count, sizeof *p->pressures, by_tank);
+	if (p->pressure_count > 1)
+		qsort(p->pressures, p->pressure_count, sizeof *p->pressures, by_tank);
 	json_value *pressures = NULL;
 	for (size_t i = 0; i < p->pressure_count; i++) {
 		if (p->pressures[i].count == 0)
