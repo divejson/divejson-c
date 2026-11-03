@@ -130,9 +130,9 @@ typedef struct sample {
 } sample;
 
 typedef struct profile {
-	/* Gas numbers, by index into the parser's gas mixes; -1 for none. */
-	const long long *mix_numbers;
-	unsigned int mix_count;
+	/* Gas numbers, by libdivecomputer's mix and tank indices; -1 for none. */
+	long long *mix_numbers, *tank_numbers;
+	unsigned int mix_count, tank_count;
 
 	int open;
 	sample current;
@@ -391,6 +391,8 @@ static void profile_free(profile *p)
 	for (size_t i = 0; i < p->pressure_count; i++)
 		series_free(&p->pressures[i]);
 	free(p->pressures);
+	free(p->mix_numbers);
+	free(p->tank_numbers);
 	free(p->current.pressures);
 	free(p->current.ppo2);
 	free(p->current.events);
@@ -435,7 +437,11 @@ static json_value *profile_json(profile *p, int *failed)
 		if (pressures == NULL)
 			pressures = json_array(failed);
 		json_value *one = series_json(&p->pressures[i], failed);
-		json_set(one, "gas_number", json_integer(p->pressures[i].key, failed), failed);
+		/* A tank the computer lists nowhere keeps its own index. */
+		long long tank = p->pressures[i].key;
+		if (tank < p->tank_count && p->tank_numbers[tank] >= 0)
+			tank = p->tank_numbers[tank];
+		json_set(one, "gas_number", json_integer(tank, failed), failed);
 		json_append(pressures, one, failed);
 	}
 	if (pressures != NULL)
@@ -487,10 +493,11 @@ static void put_usage(json_value *cylinder, dc_usage_t usage, int *failed)
 
 /*
  * The dive's cylinders: the parser's tanks in its order, then each gas mix no tank holds.
- * `mix_numbers` receives each mix's gas number, the first cylinder holding it.
+ * A mix or a tank the parser lists and cannot read is no cylinder, and the gas numbers close
+ * over it. `numbering` receives, by libdivecomputer's own mix and tank indices, the gas number
+ * of the first cylinder holding each mix and of each tank's cylinder; -1 for none.
  */
-static json_value *cylinders_json(dc_parser_t *parser, long long **mix_numbers,
-                                  unsigned int *mix_count, int *failed)
+static json_value *cylinders_json(dc_parser_t *parser, profile *numbering, int *failed)
 {
 	unsigned int mixes = 0, tanks = 0;
 	if (!field(parser, DC_FIELD_GASMIX_COUNT, 0, &mixes, sizeof mixes))
@@ -498,40 +505,41 @@ static json_value *cylinders_json(dc_parser_t *parser, long long **mix_numbers,
 	if (!field(parser, DC_FIELD_TANK_COUNT, 0, &tanks, sizeof tanks))
 		tanks = 0;
 
-	/* A mix the parser lists and cannot read is no mix, as a tank it cannot read is none. */
 	dc_gasmix_t *gas = calloc(mixes ? mixes : 1, sizeof *gas);
-	long long *numbers = malloc((mixes ? mixes : 1) * sizeof *numbers);
+	int *readable = calloc(mixes ? mixes : 1, sizeof *readable);
+	long long *mix_numbers = malloc((mixes ? mixes : 1) * sizeof *mix_numbers);
+	long long *tank_numbers = malloc((tanks ? tanks : 1) * sizeof *tank_numbers);
 	json_value *out = json_array(failed);
-	if (gas == NULL || numbers == NULL) {
+	if (gas == NULL || readable == NULL || mix_numbers == NULL || tank_numbers == NULL) {
 		free(gas);
-		free(numbers);
+		free(readable);
+		free(mix_numbers);
+		free(tank_numbers);
 		json_free(out);
 		*failed = 1;
 		return NULL;
 	}
-	unsigned int read = 0;
 	for (unsigned int i = 0; i < mixes; i++) {
-		if (field(parser, DC_FIELD_GASMIX, i, &gas[read], sizeof gas[read]))
-			read++;
+		readable[i] = field(parser, DC_FIELD_GASMIX, i, &gas[i], sizeof gas[i]);
+		mix_numbers[i] = -1;
 	}
-	mixes = read;
-	for (unsigned int i = 0; i < mixes; i++)
-		numbers[i] = -1;
 
 	long long number = 0;
 	for (unsigned int i = 0; i < tanks; i++) {
 		dc_tank_t tank;
+		tank_numbers[i] = -1;
 		if (!field(parser, DC_FIELD_TANK, i, &tank, sizeof tank))
 			continue;
+		tank_numbers[i] = number;
 		json_value *cylinder = json_object(failed);
 		json_set(cylinder, "gas_number", json_integer(number, failed), failed);
 		dc_usage_t usage = tank.usage;
-		if (tank.gasmix != DC_GASMIX_UNKNOWN && tank.gasmix < mixes) {
+		if (tank.gasmix != DC_GASMIX_UNKNOWN && tank.gasmix < mixes && readable[tank.gasmix]) {
 			put_gas(cylinder, &gas[tank.gasmix], failed);
 			if (!known_usage(usage))
 				usage = gas[tank.gasmix].usage;
-			if (numbers[tank.gasmix] < 0)
-				numbers[tank.gasmix] = number;
+			if (mix_numbers[tank.gasmix] < 0)
+				mix_numbers[tank.gasmix] = number;
 		}
 		put_usage(cylinder, usage, failed);
 		double volume, start = 0, end;
@@ -550,9 +558,9 @@ static json_value *cylinders_json(dc_parser_t *parser, long long **mix_numbers,
 		number++;
 	}
 	for (unsigned int i = 0; i < mixes; i++) {
-		if (numbers[i] >= 0)
+		if (!readable[i] || mix_numbers[i] >= 0)
 			continue;
-		numbers[i] = number;
+		mix_numbers[i] = number;
 		json_value *cylinder = json_object(failed);
 		json_set(cylinder, "gas_number", json_integer(number, failed), failed);
 		put_gas(cylinder, &gas[i], failed);
@@ -561,8 +569,11 @@ static json_value *cylinders_json(dc_parser_t *parser, long long **mix_numbers,
 		number++;
 	}
 	free(gas);
-	*mix_numbers = numbers;
-	*mix_count = mixes;
+	free(readable);
+	numbering->mix_numbers = mix_numbers;
+	numbering->mix_count = mixes;
+	numbering->tank_numbers = tank_numbers;
+	numbering->tank_count = tanks;
 	return out;
 }
 
@@ -766,8 +777,7 @@ static json_value *build(dc_parser_t *parser, const char *uuid, const char *star
 
 	profile p;
 	memset(&p, 0, sizeof p);
-	long long *mix_numbers = NULL;
-	json_value *cylinders = cylinders_json(parser, &mix_numbers, &p.mix_count, failed);
+	json_value *cylinders = cylinders_json(parser, &p, failed);
 	if (json_count(cylinders) > 0)
 		json_set(dive, "cylinders", cylinders, failed);
 	else
@@ -776,7 +786,6 @@ static json_value *build(dc_parser_t *parser, const char *uuid, const char *star
 	json_value *recording = json_object(failed);
 	put_settings(recording, parser, failed);
 
-	p.mix_numbers = mix_numbers;
 	p.events = json_array(&p.failed);
 	/* A walk that fails part-way keeps the samples delivered before it. */
 	dc_parser_samples_foreach(parser, sample_callback, &p);
@@ -784,7 +793,6 @@ static json_value *build(dc_parser_t *parser, const char *uuid, const char *star
 	if (profile != NULL)
 		json_set(recording, "profile", profile, failed);
 	profile_free(&p);
-	free(mix_numbers);
 
 	json_value *recordings = json_array(failed);
 	json_append(recordings, recording, failed);
