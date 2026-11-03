@@ -1,0 +1,198 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: The core, with no libdivecomputer anywhere
+    runs-on: ubuntu-latest
+    steps:
+      # No submodule: the core building and passing here is what says it carries no LGPL
+      # dependency.
+      - uses: actions/checkout@v4
+      - name: Build and test
+        run: |
+          cmake -S . -B build -DDIVEJSON_LIBDIVECOMPUTER=OFF
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+          test ! -e vendor/libdivecomputer/src/parser.c
+
+  pins:
+    name: The libdivecomputer pins agree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The submodule, LIBDIVECOMPUTER_COMMIT, NOTICE and the libdc-swift release the macOS
+      # job links against name one libdivecomputer commit, or a host linking the library
+      # against libdc-swift's copy would run a parser this repository never tested.
+      - name: The submodule, LIBDIVECOMPUTER_COMMIT, NOTICE and libdc-swift agree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          commit="$(tr -d '[:space:]' < LIBDIVECOMPUTER_COMMIT)"
+          submodule="$(git ls-tree HEAD vendor/libdivecomputer | awk '{print $3}')"
+          echo "LIBDIVECOMPUTER_COMMIT $commit, submodule $submodule"
+          test "$commit" = "$submodule"
+          grep -q "$commit" NOTICE
+          release="$(sed -n 's|.*libdc-swift.git", exact: "\([^"]*\)".*|\1|p' tests/swiftpm/Package.swift)"
+          pinned="$(gh api "repos/deepsealabs/libdc-swift/contents/libdivecomputer?ref=$release" --jq .sha)"
+          echo "libdc-swift $release pins $pinned"
+          test "$commit" = "$pinned"
+
+  linux:
+    name: Linux build, tests and divejson validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      # tests/test_cli.py validates every document it produces with this release.
+      - name: Install the pinned divejson
+        run: pip install -r tests/requirements.txt
+      - name: Build and test
+        run: |
+          cmake -S . -B build -DDIVEJSON_LIBDIVECOMPUTER=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+
+  sanitizers:
+    name: The suite under AddressSanitizer and UndefinedBehaviorSanitizer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: pip install -r tests/requirements.txt
+      # The vendored libdivecomputer is instrumented too: the parse path runs through it.
+      - name: Build and test
+        env:
+          CC: clang
+          CFLAGS: -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g
+        run: |
+          cmake -S . -B build -DDIVEJSON_LIBDIVECOMPUTER=ON -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+
+  fuzz:
+    name: A bounded fuzz run over the reader
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build the fuzz target
+        env:
+          CC: clang
+          CFLAGS: -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g
+        run: |
+          cmake -S . -B build -DDIVEJSON_LIBDIVECOMPUTER=ON -DDIVEJSON_FUZZ=ON \
+            -DDIVEJSON_CLI=OFF -DDIVEJSON_TESTS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build
+      # Seeds are the fixtures behind the descriptor table index that names their computer,
+      # the target's input layout; a table that moves leaves them a less useful start, no
+      # more. The Ocean's is cut to the length the run explores.
+      - name: Seed the corpus
+        run: |
+          mkdir -p corpus
+          python3 - <<'EOF'
+          from pathlib import Path
+          fixtures = Path("tests/fixtures/libdivecomputer")
+          Path("corpus/perdix-3").write_bytes(bytes([1, 3, 0]) + (fixtures / "shearwater-perdix-3_D9772626_2026-10-26T1503.bin").read_bytes())
+          Path("corpus/ocean").write_bytes(bytes([1, 0x66, 0]) + (fixtures / "suunto-ocean_253810000400_2026-10-26T1501.bin").read_bytes()[:65536])
+          EOF
+      - name: Fuzz for five minutes
+        run: |
+          build/fuzz_libdivecomputer corpus -max_total_time=300 -timeout=10 \
+            -rss_limit_mb=2048 -max_len=65539 -print_final_stats=1
+      - name: Keep what it found
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes
+          path: |
+            crash-*
+            timeout-*
+            oom-*
+            leak-*
+          if-no-files-found: ignore
+
+  macos:
+    name: macOS links the library against libdc-swift's libdivecomputer
+    runs-on: macos-latest
+    steps:
+      # A checkout named divejson-c, the identity tests/swiftpm's path dependency takes.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          path: divejson-c
+      - name: Build the executable against libdc-swift
+        working-directory: divejson-c/tests/swiftpm
+        run: swift build
+      - name: Read both fixtures through it
+        working-directory: divejson-c/tests/swiftpm
+        run: |
+          fixtures=../fixtures/libdivecomputer
+          perdix=shearwater-perdix-3_D9772626_2026-10-26T1503
+          ocean=suunto-ocean_253810000400_2026-10-26T1501
+          .build/debug/ReadFixtures Shearwater "Perdix 3" 14 "$fixtures/$perdix.bin" "$RUNNER_TEMP/$perdix.divejson"
+          .build/debug/ReadFixtures Suunto Ocean 1 "$fixtures/$ocean.bin" "$RUNNER_TEMP/$ocean.divejson"
+          python3 ../same_document.py "$fixtures/$perdix.divejson" "$RUNNER_TEMP/$perdix.divejson"
+          python3 ../same_document.py "$fixtures/$ocean.divejson" "$RUNNER_TEMP/$ocean.divejson"
+
+  android:
+    name: The library compiles under the Android NDK for arm64-v8a
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      # A compile, with no JNI layer: the library alone, against the vendored headers.
+      - name: Build the library
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DDIVEJSON_LIBDIVECOMPUTER=ON -DDIVEJSON_CLI=OFF -DDIVEJSON_TESTS=OFF
+          cmake --build build --target divejson
+          file build/libdivejson.a
+          "$ANDROID_NDK_LATEST_HOME"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm \
+            --undefined-only build/libdivejson.a | grep -q 'dc_parser_new2'
+
+  image:
+    name: The release image builds and runs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build it for linux/amd64
+        run: docker build -t divejson-c:check .
+      - name: Run it on a fixture
+        run: |
+          docker run --rm divejson-c:check --version
+          docker run --rm -i divejson-c:check --vendor Shearwater --product "Perdix 3" --model 14 \
+            --exported-at 2026-11-03T00:00:00+00:00 - \
+            < tests/fixtures/libdivecomputer/shearwater-perdix-3_D9772626_2026-10-26T1503.bin \
+            > "$RUNNER_TEMP/perdix-3.divejson"
+          python3 tests/same_document.py \
+            tests/fixtures/libdivecomputer/shearwater-perdix-3_D9772626_2026-10-26T1503.divejson \
+            "$RUNNER_TEMP/perdix-3.divejson"
+          id="$(docker create divejson-c:check)"
+          docker cp "$id:/usr/share/licenses/divejson-c" "$RUNNER_TEMP/licenses"
+          ls "$RUNNER_TEMP/licenses"
+          test -s "$RUNNER_TEMP/licenses/LICENSE"
+          test -s "$RUNNER_TEMP/licenses/NOTICE"
+          grep -q "LESSER GENERAL PUBLIC LICENSE" "$RUNNER_TEMP/licenses/LGPL-2.1.txt"

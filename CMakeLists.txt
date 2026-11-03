@@ -31,7 +31,6 @@ if(DIVEJSON_LIBDIVECOMPUTER)
   # whatever links the library to supply.
   target_sources(divejson PRIVATE src/libdivecomputer.c)
   target_include_directories(divejson PRIVATE "${DIVEJSON_LIBDIVECOMPUTER_INCLUDE_DIR}")
-  target_compile_definitions(divejson PUBLIC DIVEJSON_LIBDIVECOMPUTER=1)
 endif()
 
 set(LIBDC "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libdivecomputer")

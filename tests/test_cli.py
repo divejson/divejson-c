@@ -16,6 +16,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from same_document import compared
+
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "fixtures" / "libdivecomputer"
 EXPORTED_AT = "2026-11-03T00:00:00+00:00"
@@ -42,11 +44,6 @@ def check(condition, message):
 def run(cli, args, stdin=None):
     # No environment at all: the program reads none, and a consumer may give it none.
     return subprocess.run([cli, *args], input=stdin, capture_output=True, env={}, timeout=120)
-
-
-def compared(document):
-    """A document less what moves without the mapping moving: the generator and the time."""
-    return {key: value for key, value in document.items() if key not in ("generator", "exported_at")}
 
 
 def main():

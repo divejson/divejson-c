@@ -1,0 +1,28 @@
+divejson-c
+Copyright (c) 2026 The DiveJSON Authors, under the MIT License in LICENSE.
+
+The divejson-raw program is built with libdivecomputer compiled in and statically linked.
+libdivecomputer is copyright (C) Jef Driesen and its contributors, and is distributed under
+the GNU Lesser General Public License, version 2.1 or later; its text is in
+LGPL-2.1.txt beside this notice. The copy built in is the deepsealabs/libdivecomputer fork,
+https://github.com/deepsealabs/libdivecomputer, at commit
+1b201bb63b2870a4a0804a92b9ba1b7b003aadea, unmodified. Its complete source, and the source of
+divejson-raw that links it, are at https://github.com/divejson/divejson-c, where
+vendor/libdivecomputer is that commit and the release tag names the source each published
+binary was built from; README.md there says how to rebuild divejson-raw against a modified
+libdivecomputer.
+
+libdivecomputer includes heatshrink, copyright (c) 2013-2015 Scott Vokes, distributed under
+the following terms:
+
+  Permission to use, copy, modify, and/or distribute this software for any
+  purpose with or without fee is hereby granted, provided that the above
+  copyright notice and this permission notice appear in all copies.
+
+  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+  WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+  MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+  ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+  WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.

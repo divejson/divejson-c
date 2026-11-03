@@ -3,3 +3,8 @@
 /tests/swiftpm/.build/
 /tests/swiftpm/Package.resolved
 .swiftpm/
+__pycache__/
+/crash-*
+/timeout-*
+/oom-*
+/leak-*
