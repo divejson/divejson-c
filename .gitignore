@@ -1,0 +1,5 @@
+/build/
+/.build/
+/tests/swiftpm/.build/
+/tests/swiftpm/Package.resolved
+.swiftpm/
