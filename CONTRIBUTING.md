@@ -44,7 +44,7 @@ CI runs more than that, and every job is required to pass:
 | the pins | the submodule, `LIBDIVECOMPUTER_COMMIT`, `NOTICE` and the libdc-swift release in `tests/swiftpm/Package.swift` name one commit |
 | Linux | the build and the four suites |
 | sanitizers | the same under AddressSanitizer and UndefinedBehaviorSanitizer, the vendored libdivecomputer instrumented too |
-| fuzz | five minutes of `fuzz/fuzz_libdivecomputer.c`, which fuzzes the descriptor across the linked table as well as the bytes, since a caller may accept any descriptor it is handed. `.github/scripts/fuzz_triage.py` re-runs every input it kept and fails the job on a finding in this repository's code; one inside `vendor/libdivecomputer` goes in the job summary and the uploaded findings, since the vendored copy is not patched here |
+| fuzz | five minutes of `fuzz/fuzz_libdivecomputer.c`, which fuzzes the descriptor across the linked table as well as the bytes, since a caller may accept any descriptor it is handed; the fuzz build instruments the reader and the vendored parsers for coverage. `.github/scripts/fuzz_triage.py` re-runs every input it kept and fails the job on a finding in this repository's code; one inside `vendor/libdivecomputer` goes in the job summary and the uploaded findings, since the vendored copy is not patched here |
 | macOS | an executable linking `Package.swift`'s library against libdc-swift's libdivecomputer reads both fixtures to the expected documents |
 | Android | the library compiles under the NDK for `arm64-v8a` |
 | the image | the `Dockerfile` builds, runs a fixture and carries its notices |

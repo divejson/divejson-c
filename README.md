@@ -48,8 +48,8 @@ not set for itself. Its parsers are libdivecomputer's, and libdivecomputer's par
 their input. Fuzzing the vendored copy finds reads past the end of the buffer in several
 families' parsers and inputs on which the Suunto Nautic parser never returns; on such an
 input the process can die on a signal or run until it is stopped. The vendored copy stays
-exactly what its upstream released, the commit an Apple host links too, so those defects are
-fixed upstream rather than here, and CI's fuzz run lists them on every pull request without
+exactly what its upstream released, the commit an Apple host links too, so those defects stay
+open until upstream fixes them, and CI's fuzz run lists them on every pull request without
 failing on them. A finding in this repository's own code fails it.
 
 | exit status | meaning |
