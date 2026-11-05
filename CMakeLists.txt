@@ -19,6 +19,12 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
   set(DIVEJSON_WARNINGS -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion)
 endif()
 
+if(DIVEJSON_FUZZ)
+  # libFuzzer steers by the coverage of what it runs, so the code it explores is instrumented
+  # as well as the target, the vendored parsers among it.
+  add_compile_options(-fsanitize=fuzzer-no-link)
+endif()
+
 add_library(divejson STATIC src/dive.c src/identity.c src/json.c)
 target_include_directories(divejson PUBLIC include)
 target_compile_options(divejson PRIVATE ${DIVEJSON_WARNINGS})
