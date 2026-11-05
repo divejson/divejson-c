@@ -23,6 +23,7 @@ if(DIVEJSON_FUZZ)
   # libFuzzer steers by the coverage of what it runs, so the code it explores is instrumented
   # as well as the target, the vendored parsers among it.
   add_compile_options(-fsanitize=fuzzer-no-link)
+  add_link_options(-fsanitize=fuzzer-no-link)
 endif()
 
 add_library(divejson STATIC src/dive.c src/identity.c src/json.c)
